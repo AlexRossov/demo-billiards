@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import './App.css'
+import React, {useEffect, useRef, useState} from 'react';
+import './App.css';
 
 interface Ball {
   x: number;
@@ -11,15 +11,34 @@ interface Ball {
 }
 
 const BilliardsTable: React.FC = () => {
+  // Референсы для элементов и состояния
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const ballsRef = useRef<Ball[]>([]);
   const selectedBallRef = useRef<Ball | null>(null);
   const isMouseDownRef = useRef<boolean>(false);
   const pointerXRef = useRef<number>(0);
   const pointerYRef = useRef<number>(0);
-  const friction = 0.995; // Коэффициент трения
-  const pushForceMultiplier = 60; // Увеличенный множитель силы толчка
+  const [selectedBallIndex, setSelectedBallIndex] = useState<number | null>(null);
+  const [menuPosition, setMenuPosition] = useState<{ x: number, y: number }>({ x: 0, y: 0 });
+  const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
+  const colors = [
+    '#ff0000',
+    '#ff7f00',
+    '#ffff00',
+    '#00ff00',
+    '#0000ff',
+    '#4b0082',
+    '#8a2be2',
+    '#ffffff',
+    '#a9a9a9',
+    '#000000'
+  ];
 
+  // Константы для настройки поведения шаров
+  const friction = 0.995; // Коэффициент типа трения
+  const pushForceMultiplier = 7; // Увеличенный множитель силы толчка - сила удара
+
+  // Инициализация холста и обработчиков событий
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -28,14 +47,16 @@ const BilliardsTable: React.FC = () => {
     if (!ctx) return;
 
     const handleMouseMove = (event: MouseEvent) => {
+      // Обновление координат указателя мыши
       pointerXRef.current = event.clientX - canvas.getBoundingClientRect().left;
       pointerYRef.current = event.clientY - canvas.getBoundingClientRect().top;
 
       if (isMouseDownRef.current && selectedBallRef.current) {
+        // Расчет направления толчка выбранного шара
         const ball = selectedBallRef.current;
         const angle = Math.atan2(pointerYRef.current - ball.y, pointerXRef.current - ball.x);
-        ball.dx = Math.cos(angle) * 0.1 * pushForceMultiplier;
-        ball.dy = Math.sin(angle) * 0.1 * pushForceMultiplier;
+        ball.dx = Math.cos(angle) * pushForceMultiplier;
+        ball.dy = Math.sin(angle) * pushForceMultiplier;
       }
     };
 
@@ -48,6 +69,7 @@ const BilliardsTable: React.FC = () => {
       const mouseX = event.clientX - rect.left;
       const mouseY = event.clientY - rect.top;
 
+      // Проверка нажатия на шар и начало перемещения
       balls.forEach(ball => {
         if (Math.sqrt((mouseX - ball.x) ** 2 + (mouseY - ball.y) ** 2) < ball.radius) {
           selectedBallRef.current = ball;
@@ -58,6 +80,7 @@ const BilliardsTable: React.FC = () => {
     };
 
     const handleMouseUp = () => {
+      // Очистка выбранного шара и завершение перемещения
       selectedBallRef.current = null;
       isMouseDownRef.current = false;
       document.removeEventListener('mousemove', handleMouseMove);
@@ -71,8 +94,10 @@ const BilliardsTable: React.FC = () => {
       document.removeEventListener('mouseup', handleMouseUp);
       document.removeEventListener('mousemove', handleMouseMove);
     };
+
   }, []);
 
+  // Анимация и обновление шаров
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -90,63 +115,70 @@ const BilliardsTable: React.FC = () => {
       ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
       balls.forEach(ball => {
+        // Рисование шара
         ctx.beginPath();
         ctx.fillStyle = ball.color;
         ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
         ctx.fill();
         ctx.closePath();
 
-        // Применяем трение
+        // Применение трения
         ball.dx *= friction;
         ball.dy *= friction;
 
+        // Обновление координат шара
         ball.x += ball.dx;
         ball.y += ball.dy;
 
-        // Обработка столкновений со стенками
+        // Обработка столкновений со стенами
         if (ball.x - ball.radius < 0 || ball.x + ball.radius > canvasWidth) {
-          ball.dx *= -0.9; // Уменьшаем скорость при ударе о стенку
+          ball.dx *= -0.9; // Уменьшение скорости при ударе о стенку
         }
         if (ball.y - ball.radius < 0 || ball.y + ball.radius > canvasHeight) {
-          ball.dy *= -0.9; // Уменьшаем скорость при ударе о стенку
+          ball.dy *= -0.9; // Уменьшение скорости при ударе о стенку
         }
 
         // Обработка столкновений между шарами
-        balls.forEach(otherBall => {
-          if (ball !== otherBall) {
-            const distX = otherBall.x - ball.x;
-            const distY = otherBall.y - ball.y;
-            const distance = Math.sqrt(distX * distX + distY * distY);
+        balls.forEach(ball => {
+          balls.forEach(otherBall => {
+            if (ball !== otherBall) {
+              const distX = otherBall.x - ball.x;
+              const distY = otherBall.y - ball.y;
+              const distance = Math.sqrt(distX * distX + distY * distY);
 
-            if (distance < ball.radius + otherBall.radius) {
-              const angle = Math.atan2(distY, distX);
-              const sine = Math.sin(angle);
-              const cosine = Math.cos(angle);
+              // Проверка на столкновение
+              if (distance < ball.radius + otherBall.radius) {
+                // Расчет угла и синуса/косинуса угла между шарами
+                const angle = Math.atan2(distY, distX);
+                const sine = Math.sin(angle);
+                const cosine = Math.cos(angle);
 
-              // Rotate velocities
-              const velocityX = ball.dx * cosine + ball.dy * sine;
-              const otherVelocityX = otherBall.dx * cosine + otherBall.dy * sine;
+                // Поворот скоростей
+                const velocityX = ball.dx * cosine + ball.dy * sine;
+                const velocityY = ball.dy * cosine - ball.dx * sine;
+                const otherVelocityX = otherBall.dx * cosine + otherBall.dy * sine;
+                const otherVelocityY = otherBall.dy * cosine - otherBall.dx * sine;
 
-              // Calculate new velocities after collision
-              const velocityXAfterCollision = ((ball.radius - otherBall.radius) * velocityX + 2 * otherBall.radius * otherVelocityX) / (ball.radius + otherBall.radius);
+                // Расчет новых скоростей после столкновения (формула для упругого столкновения)
+                const velocityXAfterCollision = ((ball.radius - otherBall.radius) * velocityX + 2 * otherBall.radius * otherVelocityX) / (ball.radius + otherBall.radius);
+                const otherVelocityXAfterCollision = ((otherBall.radius - ball.radius) * otherVelocityX + 2 * ball.radius * velocityX) / (ball.radius + otherBall.radius);
 
-              // Assign new velocities
-              ball.dx = velocityXAfterCollision * cosine - ball.dy * sine;
-              ball.dy = velocityXAfterCollision * sine + ball.dy * cosine;
-              otherBall.dx = otherVelocityX * cosine - otherBall.dy * sine;
-              otherBall.dy = otherVelocityX * sine + otherBall.dy * cosine;
+                // Применение новых скоростей
+                ball.dx = velocityXAfterCollision * cosine - velocityY * sine;
+                ball.dy = velocityY * cosine + velocityXAfterCollision * sine;
+                otherBall.dx = otherVelocityXAfterCollision * cosine - otherVelocityY * sine;
+                otherBall.dy = otherVelocityY * cosine + otherVelocityXAfterCollision * sine;
 
-              // Separate balls so they don't overlap
-              const overlap = (ball.radius + otherBall.radius - distance) / 2;
-              ball.x -= overlap * Math.cos(angle);
-              ball.y -= overlap * Math.sin(angle);
-              otherBall.x += overlap * Math.cos(angle);
-              otherBall.y += overlap * Math.sin(angle);
+                // Отделение шаров, чтобы они не перекрывались
+                const overlap = (ball.radius + otherBall.radius - distance) / 2;
+                ball.x -= overlap * Math.cos(angle);
+                ball.y -= overlap * Math.sin(angle);
+                otherBall.x += overlap * Math.cos(angle);
+                otherBall.y += overlap * Math.sin(angle);
+              }
             }
-          }
+          });
         });
-
-
       });
 
       requestAnimationFrame(animate);
@@ -157,6 +189,7 @@ const BilliardsTable: React.FC = () => {
     return () => {};
   }, []);
 
+  // Инициализация массива шаров
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -165,22 +198,11 @@ const BilliardsTable: React.FC = () => {
     if (!ctx) return;
 
     const balls: Ball[] = [];
-    const colors = [
-      '#ff0000',
-      '#ff7f00',
-      '#ffff00',
-      '#00ff00',
-      '#0000ff',
-      '#4b0082',
-      '#8a2be2',
-      '#ffffff',
-      '#a9a9a9',
-      '#000000'
-    ];
     const numBalls = 10;
     const minRadius = 10;
     const maxRadius = 30;
 
+    // Генерация случайных шаров с различными параметрами
     for (let i = 0; i < numBalls; i++) {
       const radius = Math.floor(Math.random() * (maxRadius - minRadius + 1)) + minRadius;
       const x = Math.random() * (canvas.width - 2 * radius) + radius;
@@ -191,10 +213,68 @@ const BilliardsTable: React.FC = () => {
       balls.push({ x, y, dx, dy, radius, color });
     }
 
+    // Сохранение сгенерированных шаров в референсе
     ballsRef.current = balls;
   }, []);
 
-  return <canvas ref={canvasRef} width={700} height={500}></canvas>;
+  const onClickBall = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (rect) {
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      const clickedBallIndex = ballsRef.current.findIndex(
+        (ball) =>
+          Math.sqrt(
+            (mouseX - ball.x) ** 2 + (mouseY - ball.y) ** 2
+          ) < ball.radius
+      );
+      if (clickedBallIndex !== -1) {
+        handleBallClick(clickedBallIndex, e);
+      }
+    }
+  };
+
+  const handleBallClick = (index: number, event: React.MouseEvent<HTMLCanvasElement>) => {
+    event.preventDefault();
+    setSelectedBallIndex(index);
+    setMenuPosition({ x: event.clientX, y: event.clientY });
+    setIsMenuOpen(true);
+  };
+
+  const handleColorSelect = (color: string, selectedBallIndex: number) => {
+    if (selectedBallIndex !== null) {
+      ballsRef.current[selectedBallIndex].color = color
+    }
+    setIsMenuOpen(false);
+  };
+
+  // Рендеринг компонента с холстом
+  return (
+    <div>
+      <canvas
+        ref={canvasRef}
+        width={700}
+        height={500}
+        onClick={(e) => onClickBall(e)}
+        onContextMenu={(e) => e.preventDefault()}
+      />
+      {isMenuOpen && selectedBallIndex !== null && (
+        <div
+          className="color-menu"
+          style={{ top: menuPosition.y, left: menuPosition.x }}
+        >
+          {colors.map((color) => (
+            <div
+              key={color}
+              className="color-option"
+              style={{ backgroundColor: color }}
+              onClick={() => handleColorSelect(color, selectedBallIndex)}
+            ></div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 };
 
 export default BilliardsTable;
